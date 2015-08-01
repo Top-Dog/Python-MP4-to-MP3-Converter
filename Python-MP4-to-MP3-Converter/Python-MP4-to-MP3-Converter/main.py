@@ -1,13 +1,17 @@
-from math import sin, cos, radians
-import sys
+# Script to convert MP4 files to MP3 files, and clean-up metadata
+# Run this script from the same directory as the target MP4 files
+# A new folder called "MP3s" will be created with the output files
+# Requires ffmeg for the conversion and python audio tools for the metadata
 
-def make_dot_string(x):
-    return ' '*int(10*cos(radians(x))+10) + 'o'
+import os
+from subprocess import Popen, PIPE
+
+def check_file_exists(directory, filename, extension):
+    abspath = directory + "/" + filename + extension
+    return os.path.isfile(abspath)
 
 def main():
-    for i in range(10000000):
-        s = make_dot_string(i)
-        print(s)
+    pass
 
 if __name__ == "__main__":
     main()
