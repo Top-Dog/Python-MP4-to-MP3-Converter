@@ -6,11 +6,12 @@
 # References:
 # http://zulko.github.io/blog/2013/10/04/read-and-write-audio-files-in-python-using-ffmpeg/
 # https://gist.github.com/thinkski/3976945
+# https://acoustid.org/server
 
 import os
 from subprocess import Popen, PIPE, call
 
-FFMPEG_BIN = "ffmpeg.exe" # The exectuable, make sure to add the bin directory to the path
+FFMPEG_BIN = "ffmpeg.exe" # The exectuable, make sure to add the bin directory to the path (if using Linux remove the '.exe')
 
 def check_file_exists(directory, filename, extension):
     abspath = directory + "/" + filename + extension
