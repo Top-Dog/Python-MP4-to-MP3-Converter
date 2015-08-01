@@ -7,6 +7,7 @@
 # http://zulko.github.io/blog/2013/10/04/read-and-write-audio-files-in-python-using-ffmpeg/
 # https://gist.github.com/thinkski/3976945
 # https://acoustid.org/server
+# http://www.randombytes.org/audio_comparison.html
 
 import os
 from subprocess import Popen, PIPE, call
