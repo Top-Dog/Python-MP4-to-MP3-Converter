@@ -3,6 +3,10 @@
 # A new folder called "MP3s" will be created with the output files
 # Requires ffmeg for the conversion and python audio tools for the metadata
 
+# References:
+# http://zulko.github.io/blog/2013/10/04/read-and-write-audio-files-in-python-using-ffmpeg/
+# https://gist.github.com/thinkski/3976945
+
 import os
 from subprocess import Popen, PIPE, call
 
