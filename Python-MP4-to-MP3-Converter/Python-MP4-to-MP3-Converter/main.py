@@ -6,7 +6,7 @@
 import os
 from subprocess import Popen, PIPE, call
 
-FFMPEG_BIN = "C:\Apps\ffmpeg-win64-static\bin\ffmpeg.exe" # Absoulate path to the exectuable
+FFMPEG_BIN = "ffmpeg.exe" # The exectuable, make sure to add the bin directory to the path
 
 def check_file_exists(directory, filename, extension):
     abspath = directory + "/" + filename + extension
@@ -33,8 +33,7 @@ def mp4_to_mp3(directory, fileName):
     #pipe = Popen(command, stdout=PIPE, bufsize=10**8)
     #pipe.stdout.close()
     #print pipe.wait()
-    #call(["ffmpeg", "-i", "Rootbeer - Under Control.mp4", "-f", "mp3", "-ab", "192000", "-vn", "out.mp3"])
-    call(["ffmpeg"])
+    call(command)
 
 def main():
     directory = "C:\Users\Sean O'Connor\Downloads\MP4 test"
