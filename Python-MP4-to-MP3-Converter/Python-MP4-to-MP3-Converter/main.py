@@ -35,6 +35,7 @@ def get_all(filetype=".mp4", ignoredir="MP3s"):
     The outside loop moves into each subdir, and the sub-subdirs..
     when it's done returns to the root dir and moves onto the next subdir'''
     # Proudly lifted from: http://stackoverflow.com/questions/120656/directory-listing-in-python
+    # Use check_file_exists
 
     for dirname, dirnames, filenames in os.walk('.'):
         # print path to all subdirectories first.
@@ -50,17 +51,19 @@ def get_all(filetype=".mp4", ignoredir="MP3s"):
             # don't go into the output directory
             dirnames.remove(ignoredir)
 
-def get_file_list(directory, outdir):
-    '''Create a list of mp4 files for conversion, excluding ones already in the output dir'''
-    # Get the list of MP4s in the current dir
-    mp4setwithext = {file for file in os.listdir(directory) if file.endswith(".mp4")}
-    mp4setwithext = {file for file in os.listdir(directory) if file.endswith(".mp4")}
-    (root, ext) = os.path.splitext(fileurl)
-    #mp4dic = dict.fromkeys(range(len(os.listdir(directory))), filelist)
+def get_file_set(directory, outdir="\\MP3s"):
+    '''Returns a set of filenames (with no extension) still to convert'''
+    # Get a set of all the target mp4 files
+    mp4targets = get_all(directory)
 
-    # Get a list of MP3s in the output dir
-    mp3set = {file for file in os.listdir(directory + outdir) if file.endswith(".mp3")}
-    #mp3dic = dict.fromkeys(range(len(os.listdir(directory + outdir))), filelist)
+    # Get the list of MP4s in the current dir (names without extensions)
+    mp4set = {os.path.splitext(file)[0] for file in mp4targets if file.endswith(".mp4")}
+
+    # Get a set of all the target mp3 files
+    mp3targets = get_all(directory+outdir)
+
+    # Get the list of MP3s in the output dir (names without extensions)
+    mp3set = {os.path.splitext(file)[0] for file in mp3targets if file.endswith(".mp3")}    
 
     # Set diffrence = tracks still to convert
     return (mp4set - mp3set)
@@ -83,10 +86,10 @@ def mp4_to_mp3(directory, fileName):
                "-vn", directory + "\\MP3s\\" + fileName + ".mp3"]   
 
     # Do the conversion from mp4 to mp3
-    # call(command)
-    pipe = Popen(command, stdout=PIPE, bufsize=10**8)
-    pipe.stdout.close()
-    print(pipe.wait())
+    call(command)
+    #pipe = Popen(command, stdout=PIPE, bufsize=10**8)
+    #pipe.stdout.close()
+    #print(pipe.wait())
 
     # Print the files information
     print("Converting: %s" % (fileName))
@@ -109,6 +112,7 @@ def main():
         thread = threading.Thread(target=mp4_to_mp3, args=(directory, filename))
         threads += [thread]
         thread.start()
+        #thread.join()
 
     for xthread in threads:
         xthread.join()
