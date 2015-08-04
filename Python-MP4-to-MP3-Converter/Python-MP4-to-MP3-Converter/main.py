@@ -16,9 +16,10 @@ from subprocess import Popen, PIPE, call
 FFMPEG_BIN = "ffmpeg.exe" # The exectuable, make sure to add the bin directory to the path (if using Linux remove the '.exe')
 
 max_num_worker_threads = 3
-q_input_mp4s = queue.Queue(maxsize=0)
-q_created_mp3s = queue.Queue(maxsize=0)
-q_existing_mp3s = queue.Queue(maxsize=0)
+q_input_mp4s = queue.Queue(maxsize=0)   # All the names of existing mp4s in the root dir
+q_existing_mp3s = queue.Queue(maxsize=0)# All the names of existing mp3s in the output dir
+q_mp4s_to_convert = queue.Queue(maxsize=0) # All the names of exsiting mp4 files in the root dir that need to be converted
+q_created_mp3s = queue.Queue(maxsize=0) # All the names of created mp3 files (for printing)
 q_threads = queue.Queue(maxsize=max_num_worker_threads)
 
 
@@ -50,6 +51,13 @@ def remove_dir(directory):
         print("Error: please remove " + directory + " manually")
         time.sleep(5)
         sys.exit()
+
+def convert_queue(myqueue):
+    '''Convert a queue to a set'''
+    outset = set()
+    for i in range(myqueue.qsize()):
+        outset.add(myqueue.get())
+    return outset
 
 def add_to_queue(myqueue, filename, filetypes):
     '''Populate a list with all the files with extensions in the filetypes array (empty=all)'''
@@ -170,7 +178,13 @@ def main():
     # Populate a queue of all the mp4s that still need to be converted 
     traverse_files(add_to_queue, q_input_mp4s, searchdir=rootdir, filetypes=[".mp4"], ignoredirs=["MP3s", "Unsorted"])
 
+    mp4sToConvert = convert_queue(q_input_mp4s).difference(convert_queue(q_existing_mp3s))
+    for filename in mp4sToConvert:
+        q_mp4s_to_convert.put(filename)
+
     # TODO: only run the ffmeg conversion/worker threads on set(q_input_mp4s) - set(q_existing_mp3s)
+    # TODO: remove time.sleep()
+    # TODO: put q_mp4s_to_convert in place of q_input_mp4s in the "worker" function
 
     # For performance benchmarking
     starttime = time.time()
