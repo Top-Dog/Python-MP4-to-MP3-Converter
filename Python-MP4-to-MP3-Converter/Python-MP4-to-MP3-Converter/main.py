@@ -8,6 +8,7 @@
 # https://gist.github.com/thinkski/3976945
 # https://acoustid.org/server
 # http://www.randombytes.org/audio_comparison.html
+# http://stackoverflow.com/questions/120656/directory-listing-in-python
 
 import os, threading, time, sys, queue
 from subprocess import Popen, PIPE, call
@@ -50,17 +51,6 @@ def remove_dir(directory):
         time.sleep(5)
         sys.exit()
 
-def populate_file_list(rootdir, filename, filetypes):
-    # depricated
-    '''Populate a list with all the files with extensions in the filetypes array (empty=all)'''
-    (fname, fext) = os.path.splitext(filename)
-    for filetype in filetypes:
-        if fext == filetype:
-            q_existing_mp3s.put(fname) #append to a global list of known MP3s
-    # Return all the files if no filetype is defined
-    if len(filetypes) == 0:
-        q_existing_mp3s.put(fname)
-
 def add_to_queue(myqueue, filename, filetypes):
     '''Populate a list with all the files with extensions in the filetypes array (empty=all)'''
     (fname, fext) = os.path.splitext(filename)
@@ -70,15 +60,6 @@ def add_to_queue(myqueue, filename, filetypes):
     # Return all the files if no filetype is defined
     if len(filetypes) == 0:
         myqueue.put(fname)
-
-        
-def spawn_thread(rootdir, filename, filetypes):
-    '''Spawn a new thread to convert a file using ffmpeg'''
-    #---- depricated --- not needed -- replaced by "worker"
-    thread = threading.Thread(target=mp4_to_mp3, args=(rootdir, filename))
-    #threads += [thread]
-    q_threads.put(thread)
-    thread.start()
     
 def worker(rootdir):
     while True:
@@ -94,7 +75,6 @@ def traverse_files(funchandle, myqueue, searchdir='.', filetypes=[".mp4"], ignor
     The second loop prints all the files in current dir
     The outside loop moves into each subdir, and the sub-subdirs..
     when it's done returns to the root dir and moves onto the next subdir'''
-    # Proudly lifted from: http://stackoverflow.com/questions/120656/directory-listing-in-python
     for dirname, dirnames, filenames in os.walk(searchdir):
         # print path to all subdirectories first.
         for subdirname in dirnames:
@@ -174,9 +154,6 @@ def printer():
         time.sleep(0.1)
 
 def main():
-    
-    # Create an array of threads
-    #threads = []
     unsortedoutputdir = r"\Unsorted"
     sortedoutputdir = r"\MP3s"
     rootdir = r"C:\Users\Sean O'Connor\Downloads\MP4 test"
@@ -192,12 +169,12 @@ def main():
 
     # Populate a queue of all the mp4s that still need to be converted 
     traverse_files(add_to_queue, q_input_mp4s, searchdir=rootdir, filetypes=[".mp4"], ignoredirs=["MP3s", "Unsorted"])
-    
 
-    #mp4_to_mp3(rootdir, testfileName)
-    #filelist = [testfileName]
+    # TODO: only run the ffmeg conversion/worker threads on set(q_input_mp4s) - set(q_existing_mp3s)
 
+    # For performance benchmarking
     starttime = time.time()
+
     # Spawn a worker task if the mp4 file name cannot be found in the list of known mp3s
     for i in range(max_num_worker_threads):
         thread = threading.Thread(target=worker, args=(rootdir,))
@@ -211,13 +188,6 @@ def main():
     #q_threads.put(thread)
     thread.start()
 
-    #for filename in filelist:
-    #    thread = threading.Thread(target=mp4_to_mp3, args=(rootdir, filename))
-    #    threads += [thread]
-    #    thread.start()
-
-    #for xthread in q_threads:
-    #    xthread.join()
     #q_threads.join()
     q_input_mp4s.join()
     q_created_mp3s.join()
