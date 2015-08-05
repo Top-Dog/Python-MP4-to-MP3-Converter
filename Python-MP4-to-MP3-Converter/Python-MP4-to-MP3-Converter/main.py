@@ -194,6 +194,8 @@ def main():
 
     # TODO: remove time.sleep(), could cause P(race conditions) to increase 
     # TODO: find out why worker threads + printer thread can not be joined/never complete
+    # - because q.get() is blocking, so the read gets stuck there and never returns, also stuck in a while 1 loop so it never completes the function
+    # http://stackoverflow.com/questions/7937755/python-threads-using-join-in-while-loop
 
     # For performance benchmarking
     starttime = time.time()
