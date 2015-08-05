@@ -15,12 +15,9 @@ from subprocess import Popen, PIPE, call
 
 FFMPEG_BIN = "ffmpeg.exe" # The exectuable, make sure to add the bin directory to the path (if using Linux remove the '.exe')
 
-max_num_worker_threads = 3
-q_input_mp4s = queue.Queue(maxsize=0)   # All the names of existing mp4s in the root dir
-q_existing_mp3s = queue.Queue(maxsize=0)# All the names of existing mp3s in the output dir
+max_num_worker_threads = 2
 q_mp4s_to_convert = queue.Queue(maxsize=0) # All the names of exsiting mp4 files in the root dir that need to be converted
 q_created_mp3s = queue.Queue(maxsize=0) # All the names of created mp3 files (for printing)
-q_threads = queue.Queue(maxsize=max_num_worker_threads)
 
 
 def check_file_exists(directory, filename, extension):
@@ -68,16 +65,25 @@ def add_to_queue(myqueue, filename, filetypes):
     # Return all the files if no filetype is defined
     if len(filetypes) == 0:
         myqueue.put(fname)
+
+def add_to_set(myset, filename, filetypes):
+    (fname, fext) = os.path.splitext(filename)
+    for filetype in filetypes:
+        if fext == filetype:
+            myset.add(fname) #append to a global list of known MP3s
+    # Return all the files if no filetype is defined
+    if len(filetypes) == 0:
+        myset.add(fname)
     
 def worker(rootdir):
     while True:
-        mp4name = q_input_mp4s.get() # blocks if there is nothing to get
+        mp4name = q_mp4s_to_convert.get() # blocks if there is nothing to get
         q_created_mp3s.put(mp4_to_mp3(rootdir, mp4name)) 
-        q_input_mp4s.task_done() # signal that a queued task is completed (oppisite to q.get())
-        time.sleep(0.5)
+        q_mp4s_to_convert.task_done() # signal that a queued task is completed (oppisite to q.get())
+        time.sleep(0.01)
         
 
-def traverse_files(funchandle, myqueue, searchdir='.', filetypes=[".mp4"], ignoredirs=["MP3s"]):
+def traverse_files(funchandle, myset, searchdir='.', filetypes=[".mp4"], ignoredirs=["MP3s"]):
     '''Reccsively get all the files from the root dir of a particular type (empty =all)
     The first loop prints all the subdirs in the current folder
     The second loop prints all the files in current dir
@@ -93,7 +99,7 @@ def traverse_files(funchandle, myqueue, searchdir='.', filetypes=[".mp4"], ignor
         for filename in filenames:
             #print(os.path.join(dirname, filename))
             # Call the helper function to do something with the filename
-            funchandle(myqueue, filename, filetypes)
+            funchandle(myset, filename, filetypes)
 
         # editing the 'dirnames' list will stop os.walk() from recursing into there.
         for ignoredir in ignoredirs:
@@ -137,17 +143,17 @@ def mp4_to_mp3(directory, fileName):
                "-vn", directory + "\\MP3s\\" + fileName + ".mp3"]
     
     # Block stdout from showing debug and progress info
-    sys.stdout = open(os.devnull, "w")
+    #sys.stdout = open(os.devnull, "w")
     
     # Do the conversion from mp4 to mp3
-    # call(command)
-    pipe = Popen(command, stdout=PIPE, bufsize=10**8)
-    pipe.stdout.close()
-    print(pipe.wait())
+    call(command)
+    #pipe = Popen(command, stdout=PIPE, bufsize=10**8)
+    #pipe.stdout.close()
+    #print(pipe.wait())
 
     # Renable stout
-    sys.stdout.flush()
-    sys.stdout = sys.__stdout__
+    ##sys.stdout.flush()
+    #sys.stdout = sys.__stdout__
     
     return "Successfully converted '%s' to mp3!" % (fileName)
 
@@ -167,46 +173,51 @@ def main():
     rootdir = r"C:\Users\Sean O'Connor\Downloads\MP4 test"
 
     testfileName = r"Rootbeer - Under Control"
+
+    existing_mp3_files = set()
+    existing_mp4_files = set()
     
     # Set up the folder structure
     check_create_folder_exsists(rootdir + sortedoutputdir)
     check_create_folder_exsists(rootdir + unsortedoutputdir)
     
-    # Populate a queue of all the existing converted mp3 tracks
-    traverse_files(add_to_queue, q_existing_mp3s, searchdir=rootdir+sortedoutputdir, filetypes=[".mp3"], ignoredirs=[])
+    # Populate a set of all the existing converted mp3 tracks
+    traverse_files(add_to_set, existing_mp3_files, searchdir=rootdir+sortedoutputdir, filetypes=[".mp3"], ignoredirs=[])
 
-    # Populate a queue of all the mp4s that still need to be converted 
-    traverse_files(add_to_queue, q_input_mp4s, searchdir=rootdir, filetypes=[".mp4"], ignoredirs=["MP3s", "Unsorted"])
+    # Populate a set of all the mp4s files 
+    traverse_files(add_to_set, existing_mp4_files, searchdir=rootdir, filetypes=[".mp4"], ignoredirs=["MP3s", "Unsorted"])
 
-    mp4sToConvert = convert_queue(q_input_mp4s).difference(convert_queue(q_existing_mp3s))
-    for filename in mp4sToConvert:
-        q_mp4s_to_convert.put(filename)
+    # Only convert mp4 files that do not have an mp3 with the same name already existing, and put them in the queue
+    existing_mp4_files.difference_update(existing_mp3_files)
+    for filename in existing_mp4_files:
+        q_mp4s_to_convert.put(filename) # This queue is accessed by the worker threads
 
-    # TODO: only run the ffmeg conversion/worker threads on set(q_input_mp4s) - set(q_existing_mp3s)
-    # TODO: remove time.sleep()
-    # TODO: put q_mp4s_to_convert in place of q_input_mp4s in the "worker" function
+    # TODO: remove time.sleep(), could cause P(race conditions) to increase 
+    # TODO: find out why worker threads + printer thread can not be joined/never complete
 
     # For performance benchmarking
     starttime = time.time()
+    threads = []
 
     # Spawn a worker task if the mp4 file name cannot be found in the list of known mp3s
     for i in range(max_num_worker_threads):
         thread = threading.Thread(target=worker, args=(rootdir,))
         thread.daemon = True # The threads created here will shutdown when hte program exits
-        #q_threads.put(thread)
+        #threads.append(thread)
         thread.start()
 
     # Spawn a printer thread to update stdout
     thread = threading.Thread(target=printer)
     thread.daemon = True # The threads created here will shutdown when hte program exits
-    #q_threads.put(thread)
+    #threads.append(thread)
     thread.start()
 
-    #q_threads.join()
-    q_input_mp4s.join()
+    for x in threads:
+        x.join()
+    q_mp4s_to_convert.join()
     q_created_mp3s.join()
     
-    print("Main Completed! Duration: %f sec" % (time.time()-starttime))
+    print("\nMain Completed! Duration: %f sec" % (time.time()-starttime))
 
 if __name__ == "__main__":
     main()
