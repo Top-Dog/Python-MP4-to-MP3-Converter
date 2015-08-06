@@ -15,7 +15,7 @@ from subprocess import Popen, PIPE, call
 
 FFMPEG_BIN = "ffmpeg.exe" # The exectuable, make sure to add the bin directory to the path (if using Linux remove the '.exe')
 
-max_num_worker_threads = 2
+MAX_NUM_OF_WORKER_THREADS = 2
 q_mp4s_to_convert = queue.Queue(maxsize=0) # All the names of exsiting mp4 files in the root dir that need to be converted
 q_created_mp3s = queue.Queue(maxsize=0) # All the names of created mp3 files (for printing)
 
@@ -76,8 +76,14 @@ def add_to_set(myset, filename, filetypes):
         myset.add(fname)
     
 def worker(rootdir):
+    '''Function to run the mp4 to mp3 task'''
+    timeout = 8 # seconds
     while True:
-        mp4name = q_mp4s_to_convert.get() # blocks if there is nothing to get
+        try:
+            mp4name = q_mp4s_to_convert.get(True, timeout) # blocks if there is nothing to get
+        except:
+            print("Worker timedout")
+            return
         q_created_mp3s.put(mp4_to_mp3(rootdir, mp4name)) 
         q_mp4s_to_convert.task_done() # signal that a queued task is completed (oppisite to q.get())
         time.sleep(0.01)
@@ -162,8 +168,13 @@ tLock = threading.Lock()
 
 def printer():
     print("Printer started")
+    timeout = 8 # seconds
     while True:
-        print(q_created_mp3s.get())
+        try:
+            print(q_created_mp3s.get(True, timeout))
+        except:
+            print("Printer timedout")
+            return
         q_created_mp3s.task_done() # Let the queue know the file has been dealt with
         time.sleep(0.1)
 
@@ -192,34 +203,39 @@ def main():
     for filename in existing_mp4_files:
         q_mp4s_to_convert.put(filename) # This queue is accessed by the worker threads
 
-    # TODO: remove time.sleep(), could cause P(race conditions) to increase 
-    # TODO: find out why worker threads + printer thread can not be joined/never complete
-    # - because q.get() is blocking, so the read gets stuck there and never returns, also stuck in a while 1 loop so it never completes the function
-    # http://stackoverflow.com/questions/7937755/python-threads-using-join-in-while-loop
+    # TODO: remove time.sleep(), could cause P(race conditions) to increase
 
     # For performance benchmarking
     starttime = time.time()
+
+    # Condition variable to allow threads to join when stuck in a while loop
+    cond = threading.Condition(threading.Lock())
+    cond.acquire()
+    workingthreadcount = MAX_NUM_OF_WORKER_THREADS
     threads = []
 
     # Spawn a worker task if the mp4 file name cannot be found in the list of known mp3s
-    for i in range(max_num_worker_threads):
+    for i in range(MAX_NUM_OF_WORKER_THREADS):
         thread = threading.Thread(target=worker, args=(rootdir,))
         thread.daemon = True # The threads created here will shutdown when hte program exits
-        #threads.append(thread)
+        threads.append(thread)
         thread.start()
 
     # Spawn a printer thread to update stdout
     thread = threading.Thread(target=printer)
     thread.daemon = True # The threads created here will shutdown when hte program exits
-    #threads.append(thread)
+    threads.append(thread)
     thread.start()
+
+    q_mp4s_to_convert.join()
+    q_created_mp3s.join()
+
+    endworktime = time.time()
 
     for x in threads:
         x.join()
-    q_mp4s_to_convert.join()
-    q_created_mp3s.join()
     
-    print("\nMain Completed! Duration: %f sec" % (time.time()-starttime))
+    print("\nMain Completed! Threadtime (before timeouts): %f sec. Total duration: %f sec" % (time.time()-endworktime, time.time()-starttime))
 
 if __name__ == "__main__":
     main()
