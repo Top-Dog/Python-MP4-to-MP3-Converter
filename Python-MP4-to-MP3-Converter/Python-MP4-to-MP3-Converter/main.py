@@ -15,7 +15,7 @@ from subprocess import Popen, PIPE, call
 
 FFMPEG_BIN = "ffmpeg.exe" # The exectuable, make sure to add the bin directory to the path (if using Linux remove the '.exe')
 
-MAX_NUM_OF_WORKER_THREADS = 2
+MAX_NUM_OF_WORKER_THREADS = 4
 q_mp4s_to_convert = queue.Queue(maxsize=0) # All the names of exsiting mp4 files in the root dir that need to be converted
 q_created_mp3s = queue.Queue(maxsize=0) # All the names of created mp3 files (for printing)
 
@@ -49,13 +49,6 @@ def remove_dir(directory):
         time.sleep(5)
         sys.exit()
 
-def convert_queue(myqueue):
-    '''Convert a queue to a set'''
-    outset = set()
-    for i in range(myqueue.qsize()):
-        outset.add(myqueue.get())
-    return outset
-
 def add_to_queue(myqueue, filename, filetypes):
     '''Populate a list with all the files with extensions in the filetypes array (empty=all)'''
     (fname, fext) = os.path.splitext(filename)
@@ -77,7 +70,7 @@ def add_to_set(myset, filename, filetypes):
     
 def worker(rootdir):
     '''Function to run the mp4 to mp3 task'''
-    timeout = 8 # seconds
+    timeout = 2 # seconds
     while True:
         try:
             mp4name = q_mp4s_to_convert.get(True, timeout) # blocks if there is nothing to get
@@ -86,7 +79,6 @@ def worker(rootdir):
             return
         q_created_mp3s.put(mp4_to_mp3(rootdir, mp4name)) 
         q_mp4s_to_convert.task_done() # signal that a queued task is completed (oppisite to q.get())
-        time.sleep(0.01)
         
 
 def traverse_files(funchandle, myset, searchdir='.', filetypes=[".mp4"], ignoredirs=["MP3s"]):
@@ -113,22 +105,6 @@ def traverse_files(funchandle, myset, searchdir='.', filetypes=[".mp4"], ignored
                 # don't go into the output directory
                 dirnames.remove(ignoredir)
 
-def get_file_list(directory, outdir):
-    '''Create a list of mp4 files for conversion, excluding ones already in the output dir (outdir)'''
-    # doesn't look like this function is needed anymore, surpassed by handels in "get_all_files"
-    # Get the list of MP4s in the current dir
-    mp4setwithext = {file for file in os.listdir(directory) if file.endswith(".mp4")}
-    mp4setwithext = {file for file in os.listdir(directory) if file.endswith(".mp4")}
-    (root, ext) = os.path.splitext(fileurl)
-    #mp4dic = dict.fromkeys(range(len(os.listdir(directory))), filelist)
-
-    # Get a list of MP3s in the output dir
-    mp3set = {file for file in os.listdir(directory + outdir) if file.endswith(".mp3")}
-    #mp3dic = dict.fromkeys(range(len(os.listdir(directory + outdir))), filelist)
-
-    # Set diffrence = tracks still to convert
-    return (mp4set - mp3set)
-
 
 def mp4_to_mp3(directory, fileName):
     '''A worker thread for converting a mp4 file to mp3 
@@ -138,7 +114,6 @@ def mp4_to_mp3(directory, fileName):
     # -f means an mp3 container
     # -b:a 192K, -q:a (variable bit rate)
     # The - at the end tells FFMPEG that it is being used with a pipe by another program
-    #command = "ffmpeg -i %s.mp4 -f mp3 -ab 192000 -vn %s.mp3" % (fileName, fileName)
     command = [FFMPEG_BIN,
                "-loglevel", "0", # lower ffmeg's verbosity
                "-i", directory + "\\" + fileName + ".mp4",
@@ -148,27 +123,14 @@ def mp4_to_mp3(directory, fileName):
                '-ac', '2', # stereo (set to '1' for mono)
                "-vn", directory + "\\MP3s\\" + fileName + ".mp3"]
     
-    # Block stdout from showing debug and progress info
-    #sys.stdout = open(os.devnull, "w")
-    
     # Do the conversion from mp4 to mp3
     call(command)
-    #pipe = Popen(command, stdout=PIPE, bufsize=10**8)
-    #pipe.stdout.close()
-    #print(pipe.wait())
-
-    # Renable stout
-    ##sys.stdout.flush()
-    #sys.stdout = sys.__stdout__
     
     return "Successfully converted '%s' to mp3!" % (fileName)
 
-# Create a thread lock, for access to stdout - not used atm
-tLock = threading.Lock()
-
 def printer():
     print("Printer started")
-    timeout = 8 # seconds
+    timeout = 5 # seconds
     while True:
         try:
             print(q_created_mp3s.get(True, timeout))
@@ -176,7 +138,6 @@ def printer():
             print("Printer timedout")
             return
         q_created_mp3s.task_done() # Let the queue know the file has been dealt with
-        time.sleep(0.1)
 
 def main():
     unsortedoutputdir = r"\Unsorted"
@@ -203,14 +164,8 @@ def main():
     for filename in existing_mp4_files:
         q_mp4s_to_convert.put(filename) # This queue is accessed by the worker threads
 
-    # TODO: remove time.sleep(), could cause P(race conditions) to increase
-
     # For performance benchmarking
     starttime = time.time()
-
-    # Condition variable to allow threads to join when stuck in a while loop
-    cond = threading.Condition(threading.Lock())
-    cond.acquire()
     workingthreadcount = MAX_NUM_OF_WORKER_THREADS
     threads = []
 
